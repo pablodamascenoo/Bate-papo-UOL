@@ -132,6 +132,8 @@ app.post("/messages", async (req, res) => {
 });
 
 app.get("/messages", async (req, res) => {
+  const { limit } = req.query;
+  const { user } = req.headers;
   const mongoClient = new MongoClient(process.env.MONGO_URI);
   try {
     await mongoClient.connect();
@@ -139,7 +141,25 @@ app.get("/messages", async (req, res) => {
 
     const array = await db.collection("messages").find({}).toArray();
 
-    res.status(200).send(array);
+    let filteredArray = array.filter((obj) =>
+      obj.to === user ||
+      obj.to.toLowerCase() === "todos" ||
+      obj.from === user ||
+      obj.type !== "private_message"
+        ? true
+        : false
+    );
+
+    res
+      .status(200)
+      .send(
+        filteredArray.length < parseInt(limit) || limit === undefined
+          ? filteredArray
+          : filteredArray.slice(
+              filteredArray.length - parseInt(limit),
+              filteredArray.length
+            )
+      );
     mongoClient.close();
   } catch (error) {
     console.log(chalk.bold.red(error));
