@@ -81,7 +81,7 @@ app.get("/participants", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   const { to, text, type } = req.body;
-  const { from } = req.headers;
+  const { user } = req.headers;
 
   const schema = Joi.object({
     to: Joi.string().alphanum().min(1).required(),
@@ -96,9 +96,7 @@ app.post("/messages", async (req, res) => {
     await mongoClient.connect();
     db = mongoClient.db("uol-data");
 
-    const array = await db.collection("users").findOne({ name: from });
-
-    console.log(chalk.bold.red(array));
+    const array = await db.collection("users").findOne({ name: user });
 
     const { value, error } = schema.validate({
       type,
@@ -112,6 +110,14 @@ app.post("/messages", async (req, res) => {
       mongoClient.close();
       return;
     }
+
+    await db.collection("messages").insertOne({
+      type,
+      to,
+      text,
+      from: user,
+      time: dayjs().format("HH:mm:ss"),
+    });
 
     res.sendStatus(201);
     mongoClient.close();
