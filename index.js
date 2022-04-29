@@ -13,11 +13,11 @@ app.use(json());
 
 app.listen(5000, console.log(chalk.bold.cyan("\nRunning server...\n")));
 
-const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
 
   const schema = Joi.object({
     username: Joi.string().alphanum().min(1).required(),
@@ -65,15 +65,17 @@ app.post("/participants", async (req, res) => {
 });
 
 app.get("/participants", async (req, res) => {
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
   try {
     await mongoClient.connect();
     db = mongoClient.db("uol-data");
 
-    const array = await db.collection("users").find().toArray();
+    const array = await db.collection("users").find({}).toArray();
 
     res.status(200).send(array);
+    mongoClient.close();
   } catch (error) {
-    console.log(chalk.bold.red(error));
+    console.log(chalk.bold.red(`${error} participants`));
     res.sendStatus(500);
     mongoClient.close();
   }
@@ -82,6 +84,7 @@ app.get("/participants", async (req, res) => {
 app.post("/messages", async (req, res) => {
   const { to, text, type } = req.body;
   const { user } = req.headers;
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
 
   const schema = Joi.object({
     to: Joi.string().alphanum().min(1).required(),
@@ -120,6 +123,23 @@ app.post("/messages", async (req, res) => {
     });
 
     res.sendStatus(201);
+    mongoClient.close();
+  } catch (error) {
+    console.log(chalk.bold.red(error));
+    res.sendStatus(500);
+    mongoClient.close();
+  }
+});
+
+app.get("/messages", async (req, res) => {
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("uol-data");
+
+    const array = await db.collection("messages").find({}).toArray();
+
+    res.status(200).send(array);
     mongoClient.close();
   } catch (error) {
     console.log(chalk.bold.red(error));
