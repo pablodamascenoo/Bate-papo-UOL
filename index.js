@@ -16,12 +16,13 @@ app.listen(5000, console.log(chalk.bold.cyan("\nRunning server...\n")));
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
-const schema = Joi.object({
-  username: Joi.string().alphanum().min(1).required(),
-});
-
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
+
+  const schema = Joi.object({
+    username: Joi.string().alphanum().min(1).required(),
+  });
+
   const { error } = schema.validate({ username: name });
 
   if (error) {
@@ -39,6 +40,7 @@ app.post("/participants", async (req, res) => {
       })
     ) {
       res.sendStatus(409);
+      mongoClient.close();
       return;
     }
 
@@ -55,7 +57,66 @@ app.post("/participants", async (req, res) => {
     });
     res.sendStatus(201);
     mongoClient.close();
-  } catch {
+  } catch (error) {
+    console.log(chalk.bold.red(error));
+    res.sendStatus(500);
+    mongoClient.close();
+  }
+});
+
+app.get("/participants", async (req, res) => {
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("uol-data");
+
+    const array = await db.collection("users").find().toArray();
+
+    res.status(200).send(array);
+  } catch (error) {
+    console.log(chalk.bold.red(error));
+    res.sendStatus(500);
+    mongoClient.close();
+  }
+});
+
+app.post("/messages", async (req, res) => {
+  const { to, text, type } = req.body;
+  const { from } = req.headers;
+
+  const schema = Joi.object({
+    to: Joi.string().alphanum().min(1).required(),
+    text: Joi.string().min(1).required(),
+    type: Joi.string()
+      .pattern(/^(message|private_message)$/)
+      .required(),
+    from: Joi.object().required(),
+  });
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("uol-data");
+
+    const array = await db.collection("users").findOne({ name: from });
+
+    console.log(chalk.bold.red(array));
+
+    const { value, error } = schema.validate({
+      type,
+      to,
+      text,
+      from: array,
+    });
+
+    if (error) {
+      res.sendStatus(422);
+      mongoClient.close();
+      return;
+    }
+
+    res.sendStatus(201);
+    mongoClient.close();
+  } catch (error) {
+    console.log(chalk.bold.red(error));
     res.sendStatus(500);
     mongoClient.close();
   }
