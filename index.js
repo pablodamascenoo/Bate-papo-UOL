@@ -172,44 +172,69 @@ app.get("/messages", async (req, res) => {
   }
 });
 
-//TODO: put the {abortEarly: False} on validate
+app.post("/status", async (req, res) => {
+  const { user } = req.headers;
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("uol-data");
+
+    const filteredUser = await db.collection("users").findOne({ name: user });
+
+    if (filteredUser === null) {
+      res.sendStatus(404);
+      mongoClient.close();
+    }
+    await db.collection("users").updateOne(
+      {
+        _id: filteredUser._id,
+      },
+      { $set: { lastStatus: Date.now() } }
+    );
+
+    res.sendStatus(200);
+    mongoClient.close();
+  } catch (error) {
+    console.log(chalk.bold.red(error));
+    res.sendStatus(500);
+    mongoClient.close();
+    return;
+  }
+});
 
 setInterval(async () => {
   const mongoClient = new MongoClient(process.env.MONGO_URI);
-
-  const schema = Joi.array().min(1).required();
 
   try {
     await mongoClient.connect();
     db = mongoClient.db("uol-data");
 
     const array = await db.collection("users").find({}).toArray();
+    const expiredUsers = array.filter((item) =>
+      parseInt(item.lastStatus) + 10000 < Date.now() ? true : false
+    );
 
-    const { error } = schema.validate(array);
-
-    if (error) {
+    if (expiredUsers.length === 0) {
       mongoClient.close();
       return;
     }
 
     await db.collection("users").deleteMany({
       _id: {
-        $in: array.map((item) => {
-          if (parseInt(item.lastStatus) + 10000 <= Date.now()) return item._id;
-        }),
+        $in: expiredUsers.map((item) => item._id),
       },
     });
 
     await db.collection("messages").insertMany(
-      array.map((item) => {
-        if (parseInt(item.lastStatus) + 10000 <= Date.now())
-          return {
-            from: item.name,
-            to: "Todos",
-            text: "sai da sala...",
-            type: "status",
-            time: dayjs().format("HH:mm:ss"),
-          };
+      expiredUsers.map((item) => {
+        return {
+          from: item.name,
+          to: "Todos",
+          text: "sai da sala...",
+          type: "status",
+          time: dayjs().format("HH:mm:ss"),
+        };
       })
     );
     mongoClient.close();
