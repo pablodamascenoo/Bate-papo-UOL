@@ -101,14 +101,18 @@ app.post("/messages", async (req, res) => {
 
     const array = await db.collection("users").findOne({ name: user });
 
-    const { value, error } = schema.validate({
-      type,
-      to,
-      text,
-      from: array,
-    });
+    const { value, error } = schema.validate(
+      {
+        type,
+        to,
+        text,
+        from: array,
+      },
+      { abortEarly: false }
+    );
 
     if (error) {
+      console.log(chalk.bold.red(error));
       res.sendStatus(422);
       mongoClient.close();
       return;
@@ -167,3 +171,51 @@ app.get("/messages", async (req, res) => {
     mongoClient.close();
   }
 });
+
+//TODO: put the {abortEarly: False} on validate
+
+setInterval(async () => {
+  const mongoClient = new MongoClient(process.env.MONGO_URI);
+
+  const schema = Joi.array().min(1).required();
+
+  try {
+    await mongoClient.connect();
+    db = mongoClient.db("uol-data");
+
+    const array = await db.collection("users").find({}).toArray();
+
+    const { error } = schema.validate(array);
+
+    if (error) {
+      mongoClient.close();
+      return;
+    }
+
+    await db.collection("users").deleteMany({
+      _id: {
+        $in: array.map((item) => {
+          if (parseInt(item.lastStatus) + 10000 <= Date.now()) return item._id;
+        }),
+      },
+    });
+
+    await db.collection("messages").insertMany(
+      array.map((item) => {
+        if (parseInt(item.lastStatus) + 10000 <= Date.now())
+          return {
+            from: item.name,
+            to: "Todos",
+            text: "sai da sala...",
+            type: "status",
+            time: dayjs().format("HH:mm:ss"),
+          };
+      })
+    );
+    mongoClient.close();
+  } catch (error) {
+    console.log(chalk.bold.red(error));
+    mongoClient.close();
+    return;
+  }
+}, 15000);
